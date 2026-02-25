@@ -135,23 +135,36 @@ def apply_edits(file_path, output_path, edits):
     return {"ok": True}
 
 
-def main():
+def handle_command(cmd):
+    """Process a single command and return result dict."""
     try:
-        raw = sys.stdin.read()
-        cmd = json.loads(raw)
-
         action = cmd.get("action")
-
         if action == "extract":
-            result = extract_text(cmd["filePath"])
+            return extract_text(cmd["filePath"])
         elif action == "apply_edits":
-            result = apply_edits(cmd["filePath"], cmd["outputPath"], cmd["edits"])
+            return apply_edits(cmd["filePath"], cmd["outputPath"], cmd["edits"])
         else:
-            result = {"ok": False, "error": f"Unknown action: {action}"}
-
-        sys.stdout.write(json.dumps(result))
+            return {"ok": False, "error": f"Unknown action: {action}"}
     except Exception as e:
-        sys.stdout.write(json.dumps({"ok": False, "error": str(e)}))
+        return {"ok": False, "error": str(e)}
+
+
+def main():
+    """Run in persistent mode: read one JSON command per line, write one JSON response per line."""
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            cmd = json.loads(line)
+        except json.JSONDecodeError as e:
+            sys.stdout.write(json.dumps({"ok": False, "error": f"Invalid JSON: {e}"}) + "\n")
+            sys.stdout.flush()
+            continue
+
+        result = handle_command(cmd)
+        sys.stdout.write(json.dumps(result) + "\n")
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":

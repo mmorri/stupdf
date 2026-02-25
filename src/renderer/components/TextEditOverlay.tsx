@@ -112,7 +112,7 @@ function SpanHitbox({
           width: Math.max(width, 100),
           height,
           fontSize: span.size * scale,
-          fontFamily: 'sans-serif',
+          fontFamily: span.font || 'sans-serif',
           padding: 0,
           margin: 0,
           border: '2px solid #3b82f6',

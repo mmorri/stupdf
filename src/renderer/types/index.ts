@@ -111,9 +111,10 @@ declare global {
       applyTextEdits: (filePath: string, outputPath: string, edits: TextEdit[]) => Promise<{ ok: boolean; error?: string }>
       readFile: (filePath: string) => Promise<ArrayBuffer>
       getTempPath: (suffix: string) => Promise<string>
-      onMenuOpen: (cb: () => void) => void
-      onMenuSave: (cb: () => void) => void
-      onMenuSaveAs: (cb: () => void) => void
+      deleteFile: (filePath: string) => Promise<boolean>
+      onMenuOpen: (cb: () => void) => () => void
+      onMenuSave: (cb: () => void) => () => void
+      onMenuSaveAs: (cb: () => void) => () => void
       removeAllListeners: (channel: string) => void
     }
   }

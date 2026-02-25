@@ -16,7 +16,8 @@ const COLORS = ['#f9e2af', '#f38ba8', '#a6e3a1', '#89b4fa', '#cba6f7', '#fab387'
 
 export default function Toolbar() {
   const { tool, setTool, color, setColor, opacity, setOpacity, lineWidth, setLineWidth,
-    fontSize, setFontSize, scale, setScale, pageCount, currentPage, setCurrentPage } = usePDFStore()
+    fontSize, setFontSize, scale, setScale, pageCount, currentPage, setCurrentPage,
+    rectFill, setRectFill, fontFamily, setFontFamily } = usePDFStore()
 
   return (
     <div style={styles.toolbar}>
@@ -70,12 +71,36 @@ export default function Toolbar() {
             <span style={styles.val}>{lineWidth}px</span>
           </label>
         )}
+        {tool === 'rectangle' && (
+          <button
+            title={rectFill ? 'Filled' : 'Outline only'}
+            onClick={() => setRectFill(!rectFill)}
+            style={{ ...styles.toolBtn, ...(rectFill ? styles.toolBtnActive : {}), fontSize: 12 }}
+          >
+            {rectFill ? '■' : '□'}
+          </button>
+        )}
         {tool === 'text' && (
-          <label style={styles.label}>Font
-            <input type="range" min={8} max={72} step={1} value={fontSize}
-              onChange={(e) => setFontSize(parseInt(e.target.value))} style={styles.slider} />
-            <span style={styles.val}>{fontSize}px</span>
-          </label>
+          <>
+            <label style={styles.label}>Font
+              <input type="range" min={8} max={72} step={1} value={fontSize}
+                onChange={(e) => setFontSize(parseInt(e.target.value))} style={styles.slider} />
+              <span style={styles.val}>{fontSize}px</span>
+            </label>
+            <select
+              value={fontFamily}
+              onChange={(e) => setFontFamily(e.target.value)}
+              style={styles.select}
+              title="Font family"
+            >
+              <option value="Arial">Arial</option>
+              <option value="Helvetica">Helvetica</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Courier New">Courier New</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+            </select>
+          </>
         )}
       </div>
 
@@ -84,7 +109,17 @@ export default function Toolbar() {
       {/* Zoom */}
       <div style={styles.group}>
         <button style={styles.toolBtn} onClick={() => setScale(Math.max(0.3, scale - 0.1))} title="Zoom out">−</button>
-        <span style={styles.val}>{Math.round(scale * 100)}%</span>
+        <select
+          value=""
+          onChange={(e) => setScale(parseFloat(e.target.value))}
+          style={{ ...styles.select, minWidth: 60, textAlign: 'center' }}
+          title="Zoom presets"
+        >
+          <option value="" disabled>{Math.round(scale * 100)}%</option>
+          {[50, 75, 100, 125, 150, 200, 300].map((z) => (
+            <option key={z} value={z / 100}>{z}%</option>
+          ))}
+        </select>
         <button style={styles.toolBtn} onClick={() => setScale(Math.min(4, scale + 0.1))} title="Zoom in">+</button>
       </div>
 
@@ -119,5 +154,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-secondary)' },
   slider: { width: 80, accentColor: 'var(--accent)' },
   val: { fontSize: 12, color: 'var(--text-secondary)', minWidth: 36, textAlign: 'center' },
+  select: { fontSize: 12, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)',
+    background: 'var(--bg-surface)', color: 'var(--text-primary)', cursor: 'pointer' },
 }
 

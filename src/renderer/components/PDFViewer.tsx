@@ -10,16 +10,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 ).toString()
 
 export default function PDFViewer() {
-  const { pdfData, scale, currentPage, setPageCount } = usePDFStore()
+  const { pdfData, scale, currentPage, setPageCount, setPdfDoc } = usePDFStore()
   const [pages, setPages] = useState<pdfjsLib.PDFPageProxy[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!pdfData) { setPages([]); return }
+    if (!pdfData) { setPages([]); setPdfDoc(null); return }
     let cancelled = false
 
     async function load() {
       const pdf = await pdfjsLib.getDocument({ data: pdfData! }).promise
+      if (cancelled) return
+      setPdfDoc(pdf)
       setPageCount(pdf.numPages)
       const loaded: pdfjsLib.PDFPageProxy[] = []
       for (let i = 1; i <= pdf.numPages; i++) {
@@ -31,7 +33,7 @@ export default function PDFViewer() {
 
     load()
     return () => { cancelled = true }
-  }, [pdfData, setPageCount])
+  }, [pdfData, setPageCount, setPdfDoc])
 
   // Scroll to current page when it changes
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { execFile } from 'child_process'
+import { spawn, ChildProcess } from 'child_process'
 import os from 'os'
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -120,6 +120,12 @@ ipcMain.handle('fs:getTempPath', async (_event, suffix: string) => {
   return path.join(os.tmpdir(), `pdf_editor_${Date.now()}${suffix}`)
 })
 
+// IPC: delete file (for temp cleanup)
+ipcMain.handle('fs:deleteFile', async (_event, filePath: string) => {
+  try { fs.unlinkSync(filePath) } catch {}
+  return true
+})
+
 function getPythonScriptPath(): string {
   if (isDev) {
     return path.join(process.cwd(), 'python', 'pdf_text_ops.py')
@@ -127,24 +133,57 @@ function getPythonScriptPath(): string {
   return path.join(process.resourcesPath, 'python', 'pdf_text_ops.py')
 }
 
+let pythonProcess: ChildProcess | null = null
+let pendingResolve: ((value: object) => void) | null = null
+let pendingReject: ((reason: Error) => void) | null = null
+let lineBuffer = ''
+
+function ensurePythonProcess() {
+  if (pythonProcess && !pythonProcess.killed) return
+  const scriptPath = getPythonScriptPath()
+  pythonProcess = spawn('python3', ['-u', scriptPath], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+
+  pythonProcess.stdout!.on('data', (data: Buffer) => {
+    lineBuffer += data.toString()
+    const lines = lineBuffer.split('\n')
+    lineBuffer = lines.pop()! // keep incomplete line
+    for (const line of lines) {
+      if (!line.trim()) continue
+      try {
+        const result = JSON.parse(line)
+        if (pendingResolve) {
+          const resolve = pendingResolve
+          pendingResolve = null
+          pendingReject = null
+          resolve(result)
+        }
+      } catch {}
+    }
+  })
+
+  pythonProcess.on('close', () => {
+    pythonProcess = null
+    if (pendingReject) {
+      const reject = pendingReject
+      pendingResolve = null
+      pendingReject = null
+      reject(new Error('Python process exited unexpectedly'))
+    }
+  })
+
+  pythonProcess.stderr!.on('data', (data: Buffer) => {
+    console.error('Python stderr:', data.toString())
+  })
+}
+
 function runPythonCommand(input: object): Promise<object> {
   return new Promise((resolve, reject) => {
-    const scriptPath = getPythonScriptPath()
-    const child = execFile('python3', [scriptPath], {
-      maxBuffer: 50 * 1024 * 1024,
-    }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr || error.message))
-        return
-      }
-      try {
-        resolve(JSON.parse(stdout))
-      } catch (e) {
-        reject(new Error(`Failed to parse Python output: ${stdout}`))
-      }
-    })
-    child.stdin!.write(JSON.stringify(input))
-    child.stdin!.end()
+    ensurePythonProcess()
+    pendingResolve = resolve
+    pendingReject = reject
+    pythonProcess!.stdin!.write(JSON.stringify(input) + '\n')
   })
 }
 
@@ -169,6 +208,10 @@ ipcMain.handle('python:applyTextEdits', async (_event, filePath: string, outputP
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
+  if (pythonProcess && !pythonProcess.killed) {
+    pythonProcess.kill()
+    pythonProcess = null
+  }
   if (process.platform !== 'darwin') app.quit()
 })
 

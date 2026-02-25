@@ -1,22 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
 import { usePDFStore } from '../store/pdfStore'
 
 export default function Sidebar() {
-  const { pdfData, pageCount, currentPage, setCurrentPage } = usePDFStore()
+  const { pdfDoc, pageCount, currentPage, setCurrentPage } = usePDFStore()
   const [thumbnails, setThumbnails] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!pdfData || pageCount === 0) { setThumbnails([]); return }
+    if (!pdfDoc || pageCount === 0) { setThumbnails([]); return }
     let cancelled = false
 
     async function generateThumbs() {
-      const pdf = await pdfjsLib.getDocument({ data: pdfData! }).promise
       const thumbs: string[] = []
-      for (let i = 1; i <= pdf.numPages; i++) {
+      for (let i = 1; i <= pdfDoc!.numPages; i++) {
         if (cancelled) return
-        const page = await pdf.getPage(i)
+        const page = await pdfDoc!.getPage(i)
         const viewport = page.getViewport({ scale: 0.2 })
         const canvas = document.createElement('canvas')
         canvas.width = viewport.width
@@ -30,7 +28,7 @@ export default function Sidebar() {
 
     generateThumbs()
     return () => { cancelled = true }
-  }, [pdfData, pageCount])
+  }, [pdfDoc, pageCount])
 
   useEffect(() => {
     if (containerRef.current) {
@@ -39,7 +37,7 @@ export default function Sidebar() {
     }
   }, [currentPage])
 
-  if (!pdfData) return null
+  if (!pdfDoc) return null
 
   return (
     <div style={styles.sidebar}>
@@ -112,4 +110,3 @@ const styles: Record<string, React.CSSProperties> = {
   placeholder: { width: '100%', height: 100, background: 'var(--bg-surface)', borderRadius: 3 },
   pageNum: { fontSize: 11, color: 'var(--text-muted)' },
 }
-
