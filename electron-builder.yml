@@ -1,0 +1,59 @@
+appId: com.pdfeditor.app
+productName: PDF Editor
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - "**/*"
+  - "!src"
+  - "!python"
+  - "!build"
+  - "!release"
+  - "!*.ts"
+  - "!*.yml"
+  - "!*.md"
+  - "!tsconfig*.json"
+  - "!vite.config.*"
+
+extraResources:
+  - from: python/
+    to: python/
+    filter:
+      - "**/*"
+
+linux:
+  target:
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+    - target: pacman
+      arch: [x64]
+  category: Office
+  icon: build/icon.png
+  maintainer: PDF Editor
+  description: A cross-platform PDF editor for Linux
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+
+rpm:
+  depends:
+    - gtk3
+    - libnotify
+    - nss
+    - libXScrnSaver
+    - libXtst
+    - xdg-utils
+    - at-spi2-atk
+    - libuuid
+
