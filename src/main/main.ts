@@ -17,6 +17,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   })
 
@@ -82,6 +83,29 @@ function buildMenu(win: BrowserWindow) {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+// Allowlist: renderer-supplied paths are only honored when they were
+// previously chosen via a native dialog or issued as an app temp path.
+// This keeps a future renderer XSS from becoming arbitrary file R/W/D.
+const allowedPaths = new Set<string>()
+
+function allowPath(p: string): void {
+  allowedPaths.add(path.normalize(p))
+}
+
+function assertAllowedPath(p: unknown, what = 'filePath'): asserts p is string {
+  if (typeof p !== 'string' || p.length === 0 || p.length > 4096) {
+    throw new Error(`Invalid ${what}`)
+  }
+  const normalized = path.normalize(p)
+  if (allowedPaths.has(normalized)) return
+  const tempPrefix = path.join(os.tmpdir(), 'pdf_editor_')
+  if (normalized.startsWith(tempPrefix)) {
+    allowedPaths.add(normalized)
+    return
+  }
+  throw new Error(`Access denied for ${what}`)
+}
+
 // IPC: open file dialog
 ipcMain.handle('dialog:openFile', async () => {
   const result = await dialog.showOpenDialog({
@@ -90,6 +114,7 @@ ipcMain.handle('dialog:openFile', async () => {
   })
   if (result.canceled || result.filePaths.length === 0) return null
   const filePath = result.filePaths[0]
+  allowPath(filePath)
   const data = fs.readFileSync(filePath)
   return { filePath, data: data.buffer }
 })
@@ -100,28 +125,36 @@ ipcMain.handle('dialog:saveFile', async (_event, defaultPath?: string) => {
     defaultPath: defaultPath || 'document.pdf',
     filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
   })
-  return result.canceled ? null : result.filePath
+  if (result.canceled || !result.filePath) return null
+  allowPath(result.filePath)
+  return result.filePath
 })
 
 // IPC: write file
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, data: ArrayBuffer) => {
+  assertAllowedPath(filePath)
   fs.writeFileSync(filePath, Buffer.from(data))
   return true
 })
 
 // IPC: read file bytes
 ipcMain.handle('fs:readFile', async (_event, filePath: string) => {
+  assertAllowedPath(filePath)
   const data = fs.readFileSync(filePath)
   return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
 })
 
 // IPC: get temp path
 ipcMain.handle('fs:getTempPath', async (_event, suffix: string) => {
-  return path.join(os.tmpdir(), `pdf_editor_${Date.now()}${suffix}`)
+  const safeSuffix = typeof suffix === 'string' ? suffix.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 32) : ''
+  const tempPath = path.join(os.tmpdir(), `pdf_editor_${Date.now()}${safeSuffix}`)
+  allowPath(tempPath)
+  return tempPath
 })
 
 // IPC: delete file (for temp cleanup)
 ipcMain.handle('fs:deleteFile', async (_event, filePath: string) => {
+  assertAllowedPath(filePath)
   try { fs.unlinkSync(filePath) } catch {}
   return true
 })
@@ -190,18 +223,22 @@ function runPythonCommand(input: object): Promise<object> {
 // IPC: extract text from PDF via Python
 ipcMain.handle('python:extractText', async (_event, filePath: string) => {
   try {
+    assertAllowedPath(filePath)
     return await runPythonCommand({ action: 'extract', filePath })
   } catch (e: any) {
-    return { ok: false, error: e.message }
+    return { ok: false, error: 'extract failed' }
   }
 })
 
 // IPC: apply text edits via Python
 ipcMain.handle('python:applyTextEdits', async (_event, filePath: string, outputPath: string, edits: any[]) => {
   try {
+    assertAllowedPath(filePath)
+    assertAllowedPath(outputPath, 'outputPath')
+    if (!Array.isArray(edits) || edits.length > 500) throw new Error('Invalid edits')
     return await runPythonCommand({ action: 'apply_edits', filePath, outputPath, edits })
   } catch (e: any) {
-    return { ok: false, error: e.message }
+    return { ok: false, error: 'apply edits failed' }
   }
 })
 
